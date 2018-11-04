@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import numpy as np
+from .lstm import CustomLSTM, CustomBiLSTM
 
 class CharBiLSTM(nn.Module):
     def __init__(self, alphabet_size, pretrain_char_embedding, embedding_dim, hidden_dim, dropout, gpu, bidirect_flag = True):
@@ -23,7 +24,11 @@ class CharBiLSTM(nn.Module):
             self.char_embeddings.weight.data.copy_(torch.from_numpy(pretrain_char_embedding))
         else:
             self.char_embeddings.weight.data.copy_(torch.from_numpy(self.random_embedding(alphabet_size, embedding_dim)))
-        self.char_lstm = nn.LSTM(embedding_dim, self.hidden_dim, num_layers=1, batch_first=True, bidirectional=bidirect_flag)
+        # self.char_lstm = nn.LSTM(embedding_dim, self.hidden_dim, num_layers=1, batch_first=True, bidirectional=bidirect_flag)
+        if bidirect_flag:
+            self.char_lstm = CustomBiLSTM(embedding_dim, self.hidden_dim, num_layers=1)
+        else:
+            self.char_lstm = CustomLSTM(embedding_dim, self.hidden_dim, num_layers=1)
         if self.gpu:
             self.char_drop = self.char_drop.cuda()
             self.char_embeddings = self.char_embeddings.cuda()
@@ -50,8 +55,11 @@ class CharBiLSTM(nn.Module):
         batch_size = input.size(0)
         char_embeds = self.char_drop(self.char_embeddings(input))
         char_hidden = None
-        pack_input = pack_padded_sequence(char_embeds, seq_lengths, True)
-        char_rnn_out, char_hidden = self.char_lstm(pack_input, char_hidden)
+        # pack_input = pack_padded_sequence(char_embeds, seq_lengths, True)
+        char_rnn_out, char_hidden = self.char_lstm(
+            # pack_input,
+            char_embeds,
+            char_hidden)
         ## char_hidden = (h_t, c_t)
         #  char_hidden[0] = h_t = (2, batch_size, lstm_dimension)
         # char_rnn_out, _ = pad_packed_sequence(char_rnn_out)
@@ -70,7 +78,10 @@ class CharBiLSTM(nn.Module):
         char_embeds = self.char_drop(self.char_embeddings(input))
         char_hidden = None
         pack_input = pack_padded_sequence(char_embeds, seq_lengths, True)
-        char_rnn_out, char_hidden = self.char_lstm(pack_input, char_hidden)
+        char_rnn_out, char_hidden = self.char_lstm(
+            # pack_input,
+            char_embeds,
+            char_hidden)
         char_rnn_out, _ = pad_packed_sequence(char_rnn_out)
         return char_rnn_out.transpose(1,0)
 

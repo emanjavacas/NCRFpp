@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from .wordrep import WordRep
+from .lstm import CustomLSTM, CustomBiLSTM
 
 class WordSequence(nn.Module):
     def __init__(self, data):
@@ -40,7 +41,11 @@ class WordSequence(nn.Module):
         if self.word_feature_extractor == "GRU":
             self.lstm = nn.GRU(self.input_size, lstm_hidden, num_layers=self.lstm_layer, batch_first=True, bidirectional=self.bilstm_flag)
         elif self.word_feature_extractor == "LSTM":
-            self.lstm = nn.LSTM(self.input_size, lstm_hidden, num_layers=self.lstm_layer, batch_first=True, bidirectional=self.bilstm_flag)
+            if self.bilstm_flag:
+                self.lstm = CustomBiLSTM(self.input_size, lstm_hidden, num_layers=self.lstm_layer, batch_first=True)
+            else:
+                self.lstm = CustomLSTM(self.input_size, lstm_hidden, num_layers=self.lstm_layer, batch_first=True)
+            # self.lstm = nn.LSTM(self.input_size, lstm_hidden, num_layers=self.lstm_layer, batch_first=True, bidirectional=self.bilstm_flag)
         elif self.word_feature_extractor == "CNN":
             # cnn_hidden = data.HP_hidden_dim
             self.word2cnn = nn.Linear(self.input_size, data.HP_hidden_dim)
@@ -95,10 +100,13 @@ class WordSequence(nn.Module):
                 cnn_feature = self.cnn_batchnorm_list[idx](cnn_feature)
             feature_out = cnn_feature.transpose(2,1).contiguous()
         else:
-            packed_words = pack_padded_sequence(word_represent, word_seq_lengths.cpu().numpy(), True)
+            # packed_words = pack_padded_sequence(word_represent, word_seq_lengths.cpu().numpy(), True)
             hidden = None
-            lstm_out, hidden = self.lstm(packed_words, hidden)
-            lstm_out, _ = pad_packed_sequence(lstm_out)
+            lstm_out, hidden = self.lstm(
+                # packed_words,
+                word_represent,
+                hidden)
+            # lstm_out, _ = pad_packed_sequence(lstm_out)
             ## lstm_out (seq_len, seq_len, hidden_size)
             feature_out = self.droplstm(lstm_out.transpose(1,0))
         ## feature_out (batch_size, seq_len, hidden_size)
